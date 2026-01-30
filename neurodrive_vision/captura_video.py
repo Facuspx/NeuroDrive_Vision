@@ -1,8 +1,5 @@
+"""Módulo de captura de video optimizado para Raspberry Pi 5.Maneja cámaras USB, CSI (Raspberry Pi Camera) y archivos de video.
 """
-Módulo de captura de video optimizado para Raspberry Pi 5.
-Maneja cámaras USB, CSI (Raspberry Pi Camera) y archivos de video.
-"""
-
 import cv2
 import logging
 from typing import Optional, Tuple
@@ -13,85 +10,44 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class ErrorCapturaVideo(Exception):
-    """
-    Excepción específica para errores en la captura de video.
+class ErrorCapturaVideo(Exception): #Excepción específica para errores en la captura de video.
     
-    Attributes
-    ----------
-    mensaje : str
-        Descripción del error.
-    codigo_error : str | None
-        Código identificador del tipo de error (opcional).
-    """
-    
-    def __init__(self, mensaje: str, codigo_error: Optional[str] = None):
-        """
-        Parameters
-        ----------
-        mensaje : str
-            Descripción detallada del error.
-        codigo_error : str | None
-            Código de error para categorización (ej: 'CAM_NO_DISPONIBLE').
-        """
+    def __init__(self, mensaje: str, codigo_error: Optional[str] = None):  #Optional puede ser un srt o None
+
         self.mensaje = mensaje
         self.codigo_error = codigo_error
         super().__init__(self.mensaje)
     
-    def __str__(self) -> str:
-        """Representación en string del error."""
+    def __str__(self) -> str:                                               #Representación en string del error.
         if self.codigo_error:
             return f"[{self.codigo_error}] {self.mensaje}"
         return self.mensaje
 
 
-class TipoFuente(Enum):
-    """Tipos de fuente de video soportados."""
+class TipoFuente(Enum):                     #Tipos de fuente de video soportados.
     CAMARA_USB = "usb"
-    CAMARA_CSI = "csi"  # Raspberry Pi Camera Module
+    CAMARA_CSI = "csi"                      # Raspberry Pi Camera Module
     ARCHIVO = "archivo"
 
 
-class CapturadorVideo:
-    """
-    Clase responsable de manejar la fuente de video (cámara web o archivo).
-    
-    Características:
-    - Compatible con Raspberry Pi 5 (USB y CSI cameras)
-    - Manejo robusto de errores
-    - Reintentos automáticos
-    - Validación de frames
-    """
+class CapturadorVideo:                      #Clase responsable de manejar la fuente de video (cámara web o archivo).
     
     # Constantes de configuración
     MAX_REINTENTOS = 3
-    TIMEOUT_LECTURA = 5  # segundos
+    #TIMEOUT_LECTURA = 5  # segundos
     
     def __init__(
         self,
         indice_camara: int = 0,
-        ruta_video: Optional[str] = None,
+        ruta_video: Optional[str] = None,               #Ruta a un archivo de video. Si se especifica, tiene prioridad sobre la cámara.
         resolucion: Optional[Tuple[int, int]] = None,
         usar_csi: bool = False,
         fps_deseado: Optional[int] = None
     ) -> None:
-        """
-        Parámetros
-        ----------
-        indice_camara : int
-            Índice de la cámara a usar (0 suele ser la webcam principal).
-        ruta_video : str | None
-            Ruta a un archivo de video. Si se especifica, tiene prioridad sobre la cámara.
-        resolucion : (ancho, alto) | None
-            Resolución deseada (ej: (640, 480) para mejor rendimiento en RPi).
-        usar_csi : bool
-            Si True, intenta usar Raspberry Pi Camera Module (CSI).
-        fps_deseado : int | None
-            FPS objetivo para la captura (útil para limitar carga en RPi).
-        """
+
         self.indice_camara = indice_camara
         self.ruta_video = ruta_video
-        self.resolucion = resolucion or (640, 480)  # Resolución por defecto para RPi
+        self.resolucion = resolucion or (640, 480)     # Resolución por defecto para RPi
         self.fps_deseado = fps_deseado
         self.usar_csi = usar_csi
         
@@ -100,8 +56,8 @@ class CapturadorVideo:
         self._frames_leidos: int = 0
         self._frames_fallidos: int = 0
         
-    def _determinar_tipo_fuente(self) -> TipoFuente:
-        """Determina el tipo de fuente de video a usar."""
+    def _determinar_tipo_fuente(self) -> TipoFuente:        #Determina el tipo de fuente de video a usar.
+        
         if self.ruta_video is not None:
             return TipoFuente.ARCHIVO
         elif self.usar_csi:
@@ -109,15 +65,8 @@ class CapturadorVideo:
         else:
             return TipoFuente.CAMARA_USB
     
-    def iniciar(self) -> None:
-        """
-        Abre la cámara o el archivo de video con reintentos automáticos.
-        
-        Raises
-        ------
-        ErrorCapturaVideo
-            Si no se puede abrir la fuente después de MAX_REINTENTOS.
-        """
+    def iniciar(self) -> None:                              #Abre la cámara o el archivo de video con reintentos automáticos.
+
         for intento in range(self.MAX_REINTENTOS):
             try:
                 self._intentar_abrir_fuente()
@@ -145,8 +94,8 @@ class CapturadorVideo:
                         f"No se pudo abrir la fuente de video después de {self.MAX_REINTENTOS} intentos: {e}"
                     )
     
-    def _intentar_abrir_fuente(self) -> None:
-        """Intenta abrir la fuente de video según su tipo."""
+    def _intentar_abrir_fuente(self) -> None:              #Intenta abrir la fuente de video según su tipo.
+
         if self._tipo_fuente == TipoFuente.ARCHIVO:
             self._captura = cv2.VideoCapture(self.ruta_video)
             
@@ -166,11 +115,11 @@ class CapturadorVideo:
             
             # Fallback a backend por defecto si V4L2 falla
             if not self._captura.isOpened():
-                logger.warning("V4L2 falló, intentando con backend por defecto")
+                logger.warning("V4L2 falló, intentando con otros métodos por defecto")
                 self._captura = cv2.VideoCapture(self.indice_camara)
     
-    def _configurar_captura(self) -> None:
-        """Configura las propiedades de la captura."""
+    def _configurar_captura(self) -> None:          #Configura las propiedades de la captura.
+
         if self._captura is None:
             return
         
@@ -191,37 +140,16 @@ class CapturadorVideo:
             # Configurar buffer size (reducir para menor latencia)
             self._captura.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     
-    def _validar_lectura_inicial(self) -> bool:
-        """
-        Valida que se pueden leer frames de la fuente.
+    def _validar_lectura_inicial(self) -> bool:         #Valida que se pueden leer frames de la fuente.
         
-        Returns
-        -------
-        bool
-            True si se pudo leer al menos un frame válido.
-        """
         for _ in range(3):  # Intentar leer 3 frames
             ret, frame = self._captura.read()
             if ret and frame is not None and frame.size > 0:
                 return True
         return False
     
-    def leer_frame(self) -> Tuple[bool, Optional[cv2.Mat]]:
-        """
-        Lee un frame de la fuente de video con validación.
-        
-        Returns
-        -------
-        ok : bool
-            Indica si la lectura fue exitosa.
-        frame : ndarray | None
-            Imagen BGR obtenida. Es None si ok es False.
-        
-        Raises
-        ------
-        ErrorCapturaVideo
-            Si la captura no fue inicializada.
-        """
+    def leer_frame(self) -> Tuple[bool, Optional[cv2.Mat]]:     #Lee un frame de la fuente de video con validación. retornamos un bool y el frame
+
         if self._captura is None:
             raise ErrorCapturaVideo(
                 "La captura de video no fue inicializada. Llama a 'iniciar()' primero."
@@ -243,20 +171,8 @@ class CapturadorVideo:
         self._frames_leidos += 1
         return True, frame
     
-    def obtener_fps(self) -> float:
-        """
-        Devuelve los FPS reportados por la fuente de video.
-        
-        Returns
-        -------
-        float
-            FPS de la fuente (puede ser 0 si no está disponible).
-        
-        Raises
-        ------
-        ErrorCapturaVideo
-            Si la captura no fue inicializada.
-        """
+    def obtener_fps(self) -> float:             #Devuelve los FPS reportados por la fuente de video.
+
         if self._captura is None:
             raise ErrorCapturaVideo("La captura de video no fue inicializada.")
         
@@ -269,20 +185,8 @@ class CapturadorVideo:
         
         return fps
     
-    def obtener_resolucion(self) -> Tuple[int, int]:
-        """
-        Devuelve la resolución actual (ancho, alto) de la captura.
-        
-        Returns
-        -------
-        Tuple[int, int]
-            (ancho, alto) en píxeles.
-        
-        Raises
-        ------
-        ErrorCapturaVideo
-            Si la captura no fue inicializada.
-        """
+    def obtener_resolucion(self) -> Tuple[int, int]:        #Devuelve la resolución actual (ancho, alto) de la captura.
+
         if self._captura is None:
             raise ErrorCapturaVideo("La captura de video no fue inicializada.")
         
@@ -291,51 +195,28 @@ class CapturadorVideo:
         
         return ancho, alto
     
-    def obtener_estadisticas(self) -> dict:
-        """
-        Retorna estadísticas de la captura.
-        
-        Returns
-        -------
-        dict
-            Diccionario con estadísticas de frames.
-        """
-        total = self._frames_leidos + self._frames_fallidos
-        tasa_exito = (self._frames_leidos / total * 100) if total > 0 else 0
-        
-        return {
-            "frames_leidos": self._frames_leidos,
-            "frames_fallidos": self._frames_fallidos,
-            "tasa_exito": tasa_exito,
-            "tipo_fuente": self._tipo_fuente.value
-        }
-    
-    def reiniciar(self) -> None:
-        """
-        Reinicia la captura de video.
-        Útil si la fuente se desconecta o hay problemas.
-        """
+    def reiniciar(self) -> None:                #Reinicia la captura de video si hay algún problema
+
         logger.info("Reiniciando captura de video...")
         self.liberar()
         self.iniciar()
     
-    def liberar(self) -> None:
-        """Libera la cámara / archivo de video y recursos asociados."""
+    def liberar(self) -> None:                  #Libera la cámara / archivo de video y recursos asociados.
+
         if self._captura is not None:
             self._captura.release()
             self._captura = None
             logger.info("Recursos de captura liberados")
     
-    def __enter__(self):
-        """Soporte para context manager."""
+    def __enter__(self):                    #Soporte para context manager.
         self.iniciar()
         return self
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Libera recursos al salir del context manager."""
+    def __exit__(self, exc_type, exc_val, exc_tb):          #Libera recursos al salir del context manager.
+
         self.liberar()
         return False
     
-    def __del__(self):
-        """Asegura que los recursos se liberen al destruir el objeto."""
+    def __del__(self):                          #Asegura que los recursos se liberen al destruir el objeto.
+        
         self.liberar()
