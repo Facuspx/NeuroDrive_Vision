@@ -1,29 +1,10 @@
-"""
-Módulo de cálculo de medidas geométricas del rostro
-(EAR, MAR y medidas simples de cabeceo) a partir de los
-puntos faciales detectados con MediaPipe FaceMesh.
-
-Este módulo NO decide todavía si hay parpadeo, bostezo o cabeceo.
-Solo entrega medidas numéricas robustas que luego serán usadas
-por los módulos de detección de eventos de somnolencia.
-"""
-
 from __future__ import annotations
-
-import logging
 from dataclasses import dataclass, field
 from typing import Optional, Tuple, List, Dict
-
-import numpy as np
-
 from .detector_rostro_mediapipe import DatosRostro
-
+import numpy as np
+import logging
 logger = logging.getLogger(__name__)
-
-
-# ==============================
-#   Excepciones
-# ==============================
 
 class ErrorMedidasRostro(Exception):
     """Error genérico en el cálculo de medidas del rostro."""
@@ -34,8 +15,7 @@ class ErrorMedidasRostro(Exception):
 #   Índices de referencia FaceMesh
 # ==============================
 
-# Nota: estos índices corresponden al modelo MediaPipe FaceMesh de 468 puntos.
-# Pueden ajustarse si se calibra con otras referencias.
+#estos índices corresponden al modelo MediaPipe FaceMesh de 468 puntos.
 
 INDICES_FACEMESH: Dict[str, Dict[str, List[int] | int]] = {
     "ojos": {
@@ -126,36 +106,16 @@ def _obtener_punto(puntos: List[Tuple[int, int]], indice: int) -> Tuple[int, int
 # ==============================
 
 class CalculadorMedidasRostro:
-    """
-    Calcula medidas geométricas (EAR, MAR, etc.) a partir de DatosRostro.
-
-    Uso típico:
-        calculador = CalculadorMedidasRostro()
-        medidas = calculador.calcular_medidas(datos_rostro)
-
-    Luego otro módulo se encargará de usar estas medidas para detectar
-    parpadeos, bostezos y cabeceos de manera robusta.
-    """
+    """Calcula medidas geométricas (EAR, MAR, etc.) a partir de DatosRostro."""
 
     def __init__(self, config_indices: Optional[Dict[str, Dict]] = None) -> None:
-        """
-        Parameters
-        ----------
-        config_indices : dict | None
-            Permite sobre-escribir los índices por defecto de FaceMesh.
-            Si es None, se usa INDICES_FACEMESH.
-        """
+ 
         self._indices = config_indices if config_indices is not None else INDICES_FACEMESH
 
     # ---------- API principal ----------
 
     def calcular_medidas(self, datos_rostro: DatosRostro) -> MedidasRostro:
-        """
-        Calcula todas las medidas geométricas principales a partir de DatosRostro.
-
-        Returns
-        -------
-        MedidasRostro
+        """Calcula todas las medidas geométricas principales a partir de DatosRostro. Returns MedidasRostro
         """
         medidas = MedidasRostro()
         medidas.rostro_presente = datos_rostro.rostro_presente
@@ -293,7 +253,6 @@ class CalculadorMedidasRostro:
         alto: int
     ) -> MedidasCabeza:
         idx_cabeza = self._indices["cabeza"]
-
         idx_nariz = idx_cabeza["nariz"]   # type: ignore
         idx_menton = idx_cabeza["menton"] # type: ignore
 

@@ -4,9 +4,6 @@ import cv2
 import logging
 from typing import Optional, Tuple
 from enum import Enum
-
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -24,7 +21,7 @@ class ErrorCapturaVideo(Exception): #Excepción específica para errores en la c
         return self.mensaje
 
 
-class TipoFuente(Enum):                     #Tipos de fuente de video soportados.
+class TipoFuente(Enum):                     #Tipos de fuente de video soportados.Para evitar errores de tipeo 
     CAMARA_USB = "usb"
     CAMARA_CSI = "csi"                      # Raspberry Pi Camera Module
     ARCHIVO = "archivo"
@@ -32,9 +29,7 @@ class TipoFuente(Enum):                     #Tipos de fuente de video soportados
 
 class CapturadorVideo:                      #Clase responsable de manejar la fuente de video (cámara web o archivo).
     
-    # Constantes de configuración
     MAX_REINTENTOS = 3
-    #TIMEOUT_LECTURA = 5  # segundos
     
     def __init__(
         self,
@@ -49,14 +44,11 @@ class CapturadorVideo:                      #Clase responsable de manejar la fue
         self.ruta_video = ruta_video
         self.resolucion = resolucion or (640, 480)     # Resolución por defecto para RPi
         self.fps_deseado = fps_deseado
-        self.usar_csi = usar_csi
-        
+        self.usar_csi = usar_csi        
         self._captura: Optional[cv2.VideoCapture] = None
         self._tipo_fuente: TipoFuente = self._determinar_tipo_fuente()
-        self._frames_leidos: int = 0
-        self._frames_fallidos: int = 0
         
-    def _determinar_tipo_fuente(self) -> TipoFuente:        #Determina el tipo de fuente de video a usar.
+    def _determinar_tipo_fuente(self) -> TipoFuente:
         
         if self.ruta_video is not None:
             return TipoFuente.ARCHIVO
@@ -77,14 +69,14 @@ class CapturadorVideo:                      #Clase responsable de manejar la fue
                 # Configurar propiedades
                 self._configurar_captura()
                 
-                # Validar que podemos leer frames
-                if not self._validar_lectura_inicial():
+                # Validar que podemos leer frames hacemos una lectura previa de 3 frames
+                if not self._validar_lectura_inicial(): #si no es true entra
                     raise ErrorCapturaVideo("No se puede leer frames de la fuente")
                 
                 logger.info(f"Fuente de video iniciada correctamente ({self._tipo_fuente.value})")
-                logger.info(f"Resolución: {self.obtener_resolucion()}, FPS: {self.obtener_fps():.2f}")
+               # logger.info(f"Resolución: {self.obtener_resolucion()}, FPS: {self.obtener_fps():.2f}")
                 return
-                
+             #Si pasa otra cosa enviamos un warning y liberamos recursos   
             except Exception as e:
                 logger.warning(f"Intento {intento + 1}/{self.MAX_REINTENTOS} falló: {e}")
                 self.liberar()
@@ -144,56 +136,51 @@ class CapturadorVideo:                      #Clase responsable de manejar la fue
         
         for _ in range(3):  # Intentar leer 3 frames
             ret, frame = self._captura.read()
-            if ret and frame is not None and frame.size > 0:
+            if ret and frame is not None and frame.size > 0: #si ret=true y frame no es None y el tamaño >0 buena lectura
                 return True
         return False
     
     def leer_frame(self) -> Tuple[bool, Optional[cv2.Mat]]:     #Lee un frame de la fuente de video con validación. retornamos un bool y el frame
 
         if self._captura is None:
-            raise ErrorCapturaVideo(
-                "La captura de video no fue inicializada. Llama a 'iniciar()' primero."
-            )
+            raise ErrorCapturaVideo("La captura de video no fue inicializada. Llama a 'iniciar()' primero.")
         
         ok, frame = self._captura.read()
         
         if not ok:
-            self._frames_fallidos += 1
-            logger.debug(f"Fallo al leer frame (total fallidos: {self._frames_fallidos})")
+            logger.debug("Fallo al leer frame")
             return False, None
         
         # Validar que el frame no está vacío o corrupto
         if frame is None or frame.size == 0:
-            self._frames_fallidos += 1
             logger.warning("Frame vacío o corrupto recibido")
             return False, None
         
-        self._frames_leidos += 1
         return True, frame
     
-    def obtener_fps(self) -> float:             #Devuelve los FPS reportados por la fuente de video.
+    # def obtener_fps(self) -> float:             #Devuelve los FPS reportados por la fuente de video.
 
-        if self._captura is None:
-            raise ErrorCapturaVideo("La captura de video no fue inicializada.")
+    #     if self._captura is None:
+    #         raise ErrorCapturaVideo("La captura de video no fue inicializada.")
         
-        fps = float(self._captura.get(cv2.CAP_PROP_FPS))
+    #     fps = float(self._captura.get(cv2.CAP_PROP_FPS))
         
-        # Algunos dispositivos retornan 0, usar un valor por defecto razonable
-        if fps == 0:
-            logger.warning("FPS no disponible desde la fuente, usando 30 por defecto")
-            fps = 30.0
+    #     # Algunos dispositivos retornan 0, usar un valor por defecto razonable
+    #     if fps == 0:
+    #         logger.warning("FPS no disponible desde la fuente, usando 30 por defecto")
+    #         fps = 30.0
         
-        return fps
+    #     return fps
     
-    def obtener_resolucion(self) -> Tuple[int, int]:        #Devuelve la resolución actual (ancho, alto) de la captura.
+    # def obtener_resolucion(self) -> Tuple[int, int]:        #Devuelve la resolución actual (ancho, alto) de la captura.
 
-        if self._captura is None:
-            raise ErrorCapturaVideo("La captura de video no fue inicializada.")
+    #     if self._captura is None:
+    #         raise ErrorCapturaVideo("La captura de video no fue inicializada.")
         
-        ancho = int(self._captura.get(cv2.CAP_PROP_FRAME_WIDTH))
-        alto = int(self._captura.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    #     ancho = int(self._captura.get(cv2.CAP_PROP_FRAME_WIDTH))
+    #     alto = int(self._captura.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
-        return ancho, alto
+    #     return ancho, alto
     
     def reiniciar(self) -> None:                #Reinicia la captura de video si hay algún problema
 

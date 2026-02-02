@@ -1,36 +1,17 @@
-"""
-Integración de:
-- captura_video (CapturadorVideo)
-- detector_rostro_mediapipe (DetectorRostroMediaPipe)
-- medidas_rostro (CalculadorMedidasRostro)
-- contador_eventos (ContadorEventosSomnolencia)
-
-Objetivo:
-Ver en tiempo real si está contando bien:
-- Parpadeos
-- Microsueños
-- Cabeceos
-y mostrar un estimador simple de atención.
-
-Pulsa 'q' para salir.
-"""
-
 import logging
 import cv2
-
+import numpy as np
 from neurodrive_vision.captura_video import CapturadorVideo, ErrorCapturaVideo
-from neurodrive_vision.detector_rostro_mediapipe import (
-    DetectorRostroMediaPipe,
-    ErrorInicializacionDetector,
-)
+from neurodrive_vision.detector_rostro_mediapipe import (DetectorRostroMediaPipe,ErrorInicializacionDetector,)
 from neurodrive_vision.medidas_rostro import CalculadorMedidasRostro
 from neurodrive_vision.contador_eventos import ContadorEventosSomnolencia
+from neurodrive_vision.detector_frote_ojos import DetectorFroteOjosMediaPipe
 
 
 def configurar_logging():
     logging.basicConfig(
         level=logging.INFO,
-        format="[%(asctime)s] %(levelname)s - %(name)s - %(message)s",
+        format=" %(levelname)s - %(name)s - %(message)s",
     )
 
 
@@ -55,20 +36,21 @@ def main():
 
     calculador_medidas = CalculadorMedidasRostro()
     contador_eventos = ContadorEventosSomnolencia()
+    detector_frote = DetectorFroteOjosMediaPipe()
 
     # ----- Inicializar captura de video -----
     try:
         with CapturadorVideo(
-            indice_camara=1,
-            ruta_video=None,#"video_example.mp4"
+            indice_camara= 1,
+            ruta_video="video_example.mp4",#"video_example.mp4"
             resolucion=(640, 480),
             usar_csi=False,   # en PC: False; en RPi con cámara CSI: True si configuraste el pipeline
             fps_deseado=30,
         ) as capturador:
 
             logger.info("Captura de video iniciada correctamente.")
-            logger.info(f"Resolución real: {capturador.obtener_resolucion()}")
-            logger.info(f"FPS reportados: {capturador.obtener_fps()}")
+            # logger.info(f"Resolución real: {capturador.obtener_resolucion()}")
+            # logger.info(f"FPS reportados: {capturador.obtener_fps()}")
 
             while True:
                 ok, frame = capturador.leer_frame()
@@ -81,14 +63,27 @@ def main():
                 # ----- Detección de rostro + puntos -----
                 datos_rostro = detector_rostro.procesar_frame(frame)
 
-                # Generamos la máscara negra con puntos (aunque no haya rostro, devuelve negro)
-                mascara = detector_rostro.dibujar_malla(
+                resultado_frote = detector_frote.procesar_frame(
                     frame_bgr=frame,
                     datos_rostro=datos_rostro,
-                    dibujar_contornos=False,
-                    dibujar_puntos=True,
-                    color_contorno=(0, 255, 255),
+                    timestamp=datos_rostro.timestamp,
                 )
+                
+                # ----- Crear máscara negra -----
+                mascara = np.zeros_like(frame)
+
+                # Dibujar puntos del rostro sobre la máscara negra
+                mascara = detector_rostro.dibujar_malla(
+                    frame_bgr = mascara,             
+                    datos_rostro = datos_rostro,
+                    dibujar_contornos = False,
+                    dibujar_puntos = True,
+                    color_contorno = (192, 255, 48),
+                )
+
+                # Dibujar debug de frote (círculos de ojos y puntas de dedos) en la misma máscara
+                mascara = detector_frote.dibujar_debug_sobre_mascara(mascara)
+
 
                 # Valores por defecto para textos
                 texto_ear = "EAR: N/A"
@@ -105,165 +100,72 @@ def main():
                         texto_mar = f"MAR: {medidas.medidas_boca.mar:.3f}"
 
                     # ----- Actualizar contador de eventos -----
-                    salida = contador_eventos.actualizar(datos_rostro.timestamp, medidas)
+                    salida = contador_eventos.actualizar(
+                    timestamp=datos_rostro.timestamp,
+                    medidas=medidas,
+                    resultado_frote=resultado_frote, 
+                    )
 
                     # Estadísticas acumuladas
                     stats = contador_eventos.obtener_estadisticas()
 
                     # ----- Dibujar textos sobre la MÁSCARA -----
-                    # EAR / MAR
-                    cv2.putText(
-                        mascara,
-                        texto_ear,
-                        (10, 25),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (0, 255, 255),
-                        2,
-                        cv2.LINE_AA,
+
+                    texto_frote = f"Frote activo: {int(resultado_frote.frote_activo)}"
+                    texto_frote2 = f"Inic/Fin: {int(resultado_frote.frote_iniciado)}/{int(resultado_frote.frote_finalizado)}"
+                    texto_frote3 = f"Dedo ojo izq/der: {int(resultado_frote.mano_cerca_ojo_izquierdo)}/{int(resultado_frote.mano_cerca_ojo_derecho)}"
+
+
+                    cv2.putText(mascara, f"Ventana confiable: {int(not salida.ventana_no_confiable)}",
+                        (10, 235), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (192, 255, 48), 1,cv2.LINE_AA,
                     )
-                    cv2.putText(
-                        mascara,
-                        texto_mar,
-                        (10, 50),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (0, 255, 255),
-                        2,
-                        cv2.LINE_AA,
+
+                    cv2.putText(mascara, texto_frote, (10, 410), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                        (192, 255, 48), 2, cv2.LINE_AA,
+                    )
+                    cv2.putText( mascara,texto_frote2, (10, 435), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (192, 255, 48), 1, cv2.LINE_AA,
+                    )
+                    cv2.putText( mascara, texto_frote3, (10, 455), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (192, 255, 48), 1, cv2.LINE_AA,
+                    )
+
+                    # EAR / MAR
+                    cv2.putText( mascara, texto_ear, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                        (192, 255, 48), 2, cv2.LINE_AA,
+                    )
+                    cv2.putText(mascara, texto_mar, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                        (192, 255, 48), 2,cv2.LINE_AA,
                     )
 
                     # Contadores de eventos
-                    cv2.putText(
-                        mascara,
-                        f"Parpadeos: {stats['parpadeos_total']}",
-                        (10, 80),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (0, 255, 255),
-                        2,
-                        cv2.LINE_AA,
+                    cv2.putText(mascara, f"Parpadeos: {stats['parpadeos_total']}", (10, 80),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (192, 255, 48), 2, cv2.LINE_AA,
                     )
-                    cv2.putText(
-                        mascara,
-                        f"Microsuenos: {stats['microsuenos_total']}",
-                        (10, 105),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (0, 255, 255),
-                        2,
-                        cv2.LINE_AA,
+                    cv2.putText(mascara, f"Microsuenos: {stats['microsuenos_total']}", (10, 105),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (192, 255, 48), 2, cv2.LINE_AA,
                     )
-                    cv2.putText(
-                        mascara,
-                        f"Bostezos: {stats['bostezos_total']}",
-                        (10, 130),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (0, 255, 255),
-                        2,
-                        cv2.LINE_AA,
+                    cv2.putText(mascara, f"Bostezos: {stats['bostezos_total']}", (10, 130),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (192, 255, 48), 2, cv2.LINE_AA,
                     )
-                    cv2.putText(
-                        mascara,
-                        f"Cabeceos: {stats['cabeceos_total']}",
-                        (10, 155),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (0, 255, 255),
-                        2,
-                        cv2.LINE_AA,
+                    cv2.putText(mascara, f"Cabeceos: {stats['cabeceos_total']}", (10, 155),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (192, 255, 48), 2, cv2.LINE_AA,
                     )
 
                     # Atención
-                    cv2.putText(
-                        mascara,
-                        f"Atencion: {salida.atencion.categoria} ({salida.atencion.nivel:.2f})",
-                        (10, 185),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (0, 255, 255),
-                        2,
-                        cv2.LINE_AA,
+                    cv2.putText(mascara, f"Atencion: {salida.atencion.categoria} ({salida.atencion.nivel:.2f})",
+                        (10, 185), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (192, 255, 48), 2, cv2.LINE_AA,
                     )
 
                     # Mensaje de motivo
-                    cv2.putText(
-                        mascara,
-                        f"{salida.atencion.motivo[:50]}",
-                        (10, 210),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (0, 255, 255),
-                        1,
-                        cv2.LINE_AA,
+                    cv2.putText(mascara, f"{salida.atencion.motivo[:50]}", (10, 210), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5, (192, 255, 48), 1, cv2.LINE_AA,
                     )
-
-                    # ----- Eventos instantáneos (flash grande) -----
-                    y_evento = 260
-                    if salida.eventos.parpadeo:
-                        cv2.putText(
-                            mascara,
-                            "PARPADEO",
-                            (10, y_evento),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.8,
-                            (0, 255, 255),
-                            2,
-                            cv2.LINE_AA,
-                        )
-                        y_evento += 30
-
-                    if salida.eventos.microsueno:
-                        cv2.putText(
-                            mascara,
-                            "MICROSUENO!",
-                            (10, y_evento),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.8,
-                            (0, 255, 255),
-                            2,
-                            cv2.LINE_AA,
-                        )
-                        y_evento += 30
-
-                    if salida.eventos.bostezo:
-                        cv2.putText(
-                            mascara,
-                            "BOSTEZO",
-                            (10, y_evento),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.8,
-                            (0, 255, 255),
-                            2,
-                            cv2.LINE_AA,
-                        )
-                        y_evento += 30
-
-                    if salida.eventos.cabeceo:
-                        cv2.putText(
-                            mascara,
-                            "CABECEO",
-                            (10, y_evento),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.8,
-                            (0, 255, 255),
-                            2,
-                            cv2.LINE_AA,
-                        )
-                        y_evento += 30
-
+                    
                 else:
                     # No hay rostro -> solo texto de aviso en la máscara
-                    cv2.putText(
-                        mascara,
-                        "Sin rostro detectado",
-                        (10, 25),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7,
-                        (0, 0, 255),
-                        2,
-                        cv2.LINE_AA,
+                    cv2.putText(mascara, "Sin rostro detectado", (10, 25), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7, (0, 0, 255),2, cv2.LINE_AA,
                     )
 
                 # ----- Mostrar ventanas -----

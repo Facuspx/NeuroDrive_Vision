@@ -1,12 +1,12 @@
 from __future__ import annotations
-import logging
-import time
 from dataclasses import dataclass, field #más claro para objetos que solo almacenan datos.
 from typing import List, Tuple, Optional, Dict
 from abc import ABC, abstractmethod
-
+import logging
+import time
 import cv2
 import numpy as np
+logger = logging.getLogger(__name__)
 
 # Importación condicional de MediaPipe 
 try:
@@ -15,9 +15,6 @@ try:
 except ImportError:
     MEDIAPIPE_DISPONIBLE = False
     mp = None
-
-logger = logging.getLogger(__name__)
-
 
 class ErrorDetectorRostro(Exception):                               #   Excepción base para errores en detección de rostro
     
@@ -48,7 +45,7 @@ class ErrorProcesamientoFrame(ErrorDetectorRostro):
 #   Estructuras de datos
 # ==============================
 
-@dataclass
+@dataclass  #Es un decorador que convierte una clase normal en una clase de datos automática
 class DatosRostro:
 
     rostro_presente: bool
@@ -60,9 +57,9 @@ class DatosRostro:
     tiempo_procesamiento: float = 0.0
 
 
-@dataclass
-class MetricasDetector:             #Métricas de rendimiento del detector para monitorear el comportamiento en Raspberry Pi.
-                                    #Si todo va bien lo podemos borrar
+@dataclass  
+class MetricasDetector:      # Usamos esto para verificar rendimiento en RP Si todo anda bien se puede borrar
+                                   
     frames_procesados: int = 0
     frames_con_rostro: int = 0
     frames_sin_rostro: int = 0
@@ -158,10 +155,8 @@ class DetectorRostroMediaPipe(DetectorRostroBase):
     ) -> None:
 
         if not MEDIAPIPE_DISPONIBLE:
-            raise ErrorInicializacionDetector(
-                "MediaPipe no está instalado. "
-                "Instala con: pip install mediapipe"
-            )
+            raise ErrorInicializacionDetector("MediaPipe no está instalado. " 
+                                              "Instala con: pip install mediapipe")
         
         self._max_rostros = max_rostros
         self._habilitar_cache = habilitar_cache
@@ -184,8 +179,6 @@ class DetectorRostroMediaPipe(DetectorRostroBase):
                 refine_landmarks=refinar_contornos,
                 min_detection_confidence=confianza_minima_deteccion,
                 min_tracking_confidence=confianza_minima_seguimiento,
-                # Nota: model_complexity no es parámetro oficial de MediaPipe
-                # pero se puede configurar internamente si se necesita
             )
             
             # Utilidades de dibujo (para debug)
@@ -236,8 +229,7 @@ class DetectorRostroMediaPipe(DetectorRostroBase):
                 self._frames_consecutivos_sin_rostro += 1
                 
                 # Usar caché si está habilitado y no han pasado muchos frames
-                if (self._habilitar_cache and 
-                    self._ultimo_resultado is not None and
+                if (self._habilitar_cache and self._ultimo_resultado is not None and
                     self._frames_consecutivos_sin_rostro <= self._max_frames_sin_deteccion):
                     
                     logger.debug(
@@ -290,7 +282,7 @@ class DetectorRostroMediaPipe(DetectorRostroBase):
                 
                 puntos_normalizados.append((x_norm, y_norm, z_norm))
                 
-                # Clipping para evitar puntos fuera del frame
+                # Clipping para evitar puntos fuera del frame delimitamos la zona 
                 x_px = max(0, min(ancho - 1, int(x_norm * ancho)))
                 y_px = max(0, min(alto - 1, int(y_norm * alto)))
                 puntos_pixeles.append((x_px, y_px))
@@ -343,7 +335,7 @@ class DetectorRostroMediaPipe(DetectorRostroBase):
         dibujar_contornos: bool = False,
         dibujar_puntos: bool = True,
         grosor_linea: int = 1,
-        color_contorno: Tuple[int, int, int] = (255, 255, 0)
+        color_contorno: Tuple[int, int, int] = (0, 255, 255)
     ) -> np.ndarray:
 
         # Creamos una imagen negra del mismo tamaño que el frame original
