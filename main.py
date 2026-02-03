@@ -6,6 +6,8 @@ from neurodrive_vision.detector_rostro_mediapipe import (DetectorRostroMediaPipe
 from neurodrive_vision.medidas_rostro import CalculadorMedidasRostro
 from neurodrive_vision.contador_eventos import ContadorEventosSomnolencia
 from neurodrive_vision.detector_frote_ojos import DetectorFroteOjosMediaPipe
+from neurodrive_vision.integracion_maquina_estados import IntegradorMaquinaEstados
+
 
 
 def configurar_logging():
@@ -37,13 +39,14 @@ def main():
     calculador_medidas = CalculadorMedidasRostro()
     contador_eventos = ContadorEventosSomnolencia()
     detector_frote = DetectorFroteOjosMediaPipe()
+    integrador_maquina = IntegradorMaquinaEstados()
 
     # ----- Inicializar captura de video -----
     try:
         with CapturadorVideo(
             indice_camara= 1,
             ruta_video="video_example.mp4",#"video_example.mp4"
-            resolucion=(640, 480),
+            resolucion=(1280, 720), #(640, 480) (1280, 720)
             usar_csi=False,   # en PC: False; en RPi con cámara CSI: True si configuraste el pipeline
             fps_deseado=30,
         ) as capturador:
@@ -59,7 +62,7 @@ def main():
                     break
 
                 frame_original = frame.copy()
-
+                contador_eventos.set_frecuencia_cardiaca_simulada(55.0)  # “modo sueño” (85.0)  # más alerta / activo
                 # ----- Detección de rostro + puntos -----
                 datos_rostro = detector_rostro.procesar_frame(frame)
 
@@ -109,24 +112,34 @@ def main():
                     # Estadísticas acumuladas
                     stats = contador_eventos.obtener_estadisticas()
 
+                    salida_maquina = integrador_maquina.actualizar(salida)
+
+
                     # ----- Dibujar textos sobre la MÁSCARA -----
 
                     texto_frote = f"Frote activo: {int(resultado_frote.frote_activo)}"
-                    texto_frote2 = f"Inic/Fin: {int(resultado_frote.frote_iniciado)}/{int(resultado_frote.frote_finalizado)}"
+                    #texto_frote2 = f"Inic/Fin: {int(resultado_frote.frote_iniciado)}/{int(resultado_frote.frote_finalizado)}"
                     texto_frote3 = f"Dedo ojo izq/der: {int(resultado_frote.mano_cerca_ojo_izquierdo)}/{int(resultado_frote.mano_cerca_ojo_derecho)}"
+
+                    cv2.putText(mascara, f"Estado alerta: {salida_maquina.estado_alerta.name}", (10, 610), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5, (0, 255, 255), 1, cv2.LINE_AA,
+                    )
+                    cv2.putText(mascara, f"Nivel alerta: {salida_maquina.nivel_alerta}", (10, 640), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5, (0, 255, 255), 1, cv2.LINE_AA,
+                    )                  
 
 
                     cv2.putText(mascara, f"Ventana confiable: {int(not salida.ventana_no_confiable)}",
                         (10, 235), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (192, 255, 48), 1,cv2.LINE_AA,
                     )
 
-                    cv2.putText(mascara, texto_frote, (10, 410), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                    cv2.putText(mascara, texto_frote, (10, 540), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                         (192, 255, 48), 2, cv2.LINE_AA,
                     )
-                    cv2.putText( mascara,texto_frote2, (10, 435), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                        (192, 255, 48), 1, cv2.LINE_AA,
-                    )
-                    cv2.putText( mascara, texto_frote3, (10, 455), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    # cv2.putText( mascara,texto_frote2, (10, 435), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    #     (192, 255, 48), 1, cv2.LINE_AA,
+                    # )
+                    cv2.putText( mascara, texto_frote3, (10, 570), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                         (192, 255, 48), 1, cv2.LINE_AA,
                     )
 

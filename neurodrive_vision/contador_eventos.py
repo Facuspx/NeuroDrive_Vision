@@ -45,9 +45,9 @@ class SalidaEventos:
 # ==============================
 #   Clase principal
 # ==============================
-
 class ContadorEventosSomnolencia:
-    """ Clase que acumula estado en el tiempo y genera eventos de somnolencia y una estimación básica de atención del conductor."""
+    """ Clase que acumula estado en el tiempo y genera eventos de somnolencia 
+    y una estimación básica de atención del conductor."""
 
     def __init__(
         self,
@@ -102,6 +102,9 @@ class ContadorEventosSomnolencia:
         self._tiempo_cabeza_abajo: float = 0.0
         self._dur_min_cabeceo: float = 0.8  # se podría parametrizar aqui era 1.0
         self._conteo_cabeceos_total: int = 0
+        # Frecuencia cardiaca simulada (bpm). La setemos externamente desde el main
+        self._fc_bpm_simulada: Optional[float] = None
+
 
         # Baseline para cabeza (se irá actualizando cuando no hay eventos raros)
         self._baseline_altura_nariz: Optional[float] = None
@@ -111,6 +114,17 @@ class ContadorEventosSomnolencia:
         self._ultimo_estimulo: Optional[float] = None
         self._ultimo_tiempo_respuesta: Optional[float] = None
         self._latencias_respuesta: List[float] = []
+
+    #Setter publico para frecuencia cardiaca
+    def set_frecuencia_cardiaca_simulada(self, fc_bpm: float) -> None:
+        """
+        Con estofijamos una frecuencia cardiaca simulada.
+        Mientras no tengamos la pulsera, podemos usar esto para pruebas.
+        En la lógica:
+        - fc_baja (<= 70 bpm) favorece interpretación de cabeceo como sueño.
+        - fc_alta (>= 90 bpm) favorece interpretación como movimiento voluntario (buscar algo, estirarse).
+        """
+        self._fc_bpm_simulada = fc_bpm
 
     # ---------- API pública ----------
 
@@ -347,19 +361,37 @@ class ContadorEventosSomnolencia:
         umbral_delta = 0.03  # 10% de la altura de la imagen, se puede ajustar
         cabeza_abajo_ahora = (delta_nariz > umbral_delta) and (delta_menton > umbral_delta)
 
+        # Condición de somnolencia para considerar el cabeceo como "por sueño"
+        ojos_cerrados_suficiente = (
+            self._estado_ojos.estado == "cerrado"
+            and self._estado_ojos.duracion_estado >= 0.5  # medio segundo con ojos cerrados
+        )
+
+        fc_baja = (
+            self._fc_bpm_simulada is not None
+            and self._fc_bpm_simulada <= 70.0
+        )
+
+        # Si no tenemos FC, no la usamos para bloquear: solo ojos+postura
+        condicion_somnolencia = ojos_cerrados_suficiente and (fc_baja or self._fc_bpm_simulada is None)
+
         if cabeza_abajo_ahora:
             self._tiempo_cabeza_abajo += dt
+
             if (
                 self._tiempo_cabeza_abajo >= self._dur_min_cabeceo
                 and not self._cabeceo_activo
                 and permite_eventos
+                and condicion_somnolencia
             ):
                 eventos.cabeceo = True
                 self._cabeceo_activo = True
                 self._conteo_cabeceos_total += 1
+
         else:
             self._tiempo_cabeza_abajo = 0.0
             self._cabeceo_activo = False
+
 
     # ---------- Estimador de atención ----------
 
@@ -389,14 +421,15 @@ class ContadorEventosSomnolencia:
                     "posible desatencion / mente en la nube"
                 )
             else:
+                # Rango normal aprox: 15–20 parpadeos/min ~ cada 3–4 s
                 nivel = 0.9
                 categoria = "alta"
                 motivo = "patron de parpadeo en rango esperado"
         else:
-            # Pocas muestras -> no sabemos mucho, asumimos atención media-alta
-            nivel = 0.8
-            categoria = "media"
-            motivo = "pocas muestras de parpadeo, asumiendo atencion media"
+            # Pocas muestras -> NO penalizamos, arrancamos asumiendo normal
+            nivel = 0.9
+            categoria = "alta"
+            motivo = "pocas muestras de parpadeo, asumiendo estado normal"
 
         # (Futuro) Respuestas a estímulos de la pulsera...
         return AtencionConductor(nivel=nivel, categoria=categoria, motivo=motivo)
